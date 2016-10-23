@@ -1,0 +1,31 @@
+#!/bin/sh
+
+#%# family=auto
+#%# capabilities=autoconf
+
+case $1 in
+    config)
+        cat <<'EOM'
+graph_title Optimizer Compression
+graph_category optimizers
+graph_vlabel Packets
+total_input_bytes.label Total_Input_Bytes
+total_output_bytes.label Total_Output_Bytes
+processed_packets.label Packet_Processed
+compressed_packets.label Packets_Compressed
+FP_entries.label FP_Entries
+last_pktId.label Last_PktId
+FP_hash_collisions.label FP_Hash_Collisions
+FP_collisions.label FP_collisions
+short_packets_in_put_in_cache.label Short_Packets_In_Put_In_Cache
+RM_invocations.label RM_invocations
+RM_obsolete_or_bad_FP.label RM_obsolete_or_bad_FP
+RM_linear_lookups.label RM_Linear_Lookups
+RM_requests_not_found.label RM_requests_not_found
+
+EOM
+  	exit 0;;
+esac
+
+/root/opennop/opennop-daemon/opennop/opennop show stats in_dedup | grep -v -e \"-\" -e \"Connecting\" -e \"Connected\" -e \"Compressor\"
+ 

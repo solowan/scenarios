@@ -1,0 +1,4 @@
+#!/bin/bash
+
+speedometer -t eth1 -l -m 1800000 -s -k 256
+

@@ -1,0 +1,16 @@
+# Nginx configuration
+server {
+         
+    listen   8060 default_server;
+    listen [::]:8060 default_server ipv6only=on;
+
+    root    /var/www;
+    index   index.html index.htm;
+
+    server_name monitorSolowan;
+         
+    location /solowan/monitor {
+    	#auth_basic "Inicio de sesion de Administrador";
+    	#auth_basic_user_file /var/www/.htpasswd;
+    }
+}

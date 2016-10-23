@@ -1,0 +1,27 @@
+#!/bin/sh
+
+
+#%# family=auto
+#%# capabilities=autoconf
+
+case $1 in
+    config)
+        cat <<'EOM'
+graph_title Optimizer Decompression
+graph_category optimizers
+graph_vlabel Packets
+total_input_bytes.label Total_Input_Bytes
+total_output_bytes.label Total_Output_Bytes
+processed_packets.label Packets_Processed
+uncompressed_packets.label Packets_Uncompressed
+FP_entries_not_found.label FP_entries_not_found
+packet_hashes_not_found.label Packet_Hashes_Not_Found
+bad_packet_format.label Bad_Packet_Format
+
+
+EOM
+        exit 0;;
+esac
+
+/root/opennop/opennop-daemon/opennop/opennop show stats out_dedup | grep -v -e \"-\" -e \"Connecting\" -e \"Connected\" -e \"Decompressor\" 
+
