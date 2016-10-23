@@ -1,0 +1,375 @@
+#/bin/bash
+
+#
+#  Name: solowan-test
+#
+#  Description: tool to download a set of files from a web server to test 
+#               opennop-solowan WAN optimizator
+#
+#  This file is part of Opennop-Solowan distribution.
+#
+#  Copyright (C) 2014 Center for Open Middleware (COM) 
+#                     Universidad Politecnica de Madrid, SPAIN
+#
+#    OpenNOP-SoloWAN is an enhanced version of the Open Network Optimization 
+#    Platform (OpenNOP) developed to add it deduplication capabilities using
+#    a modern dictionary based compression algorithm. 
+#
+#    SoloWAN is a project of the Center for Open Middleware (COM) of Universidad 
+#    Politecnica de Madrid which aims to experiment with open-source based WAN 
+#    optimization solutions.
+#
+#  References:
+#
+#    SoloWAN: solowan@centeropenmiddleware.com
+#             https://github.com/centeropenmiddleware/solowan/wiki
+#    OpenNOP: http://www.opennop.org
+#    Center for Open Middleware (COM): http://www.centeropenmiddleware.com
+#    Universidad Politecnica de Madrid (UPM): http://www.upm.es   
+#
+#  License:
+#
+#    OpenNOP-SoloWAN is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    OpenNOP-SoloWAN is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+function get_file {
+
+ 	# Download file
+	for ((i=1; i<=$times; i++)); do
+		echo -e "--\n-- Iteration #$i"
+		echo -e "--\n-- Getting file $file\n--"
+		rm -f "/tmp/$file"
+		wget -P /tmp "$proto://$server:$port/$file"
+	done
+
+}
+
+function get_files_in_index {
+
+	echo -e "--\n--Getting index file: wget $proto://$server:$port/$index"
+	rm -f /tmp/$index
+	wget -P /tmp $proto://$server:$port/$index
+	if [ $? -ne 0 ]; then
+		echo "ERROR: cannot get index $index from server $proto://$server:$port."
+		exit 1
+	fi
+ 
+ 	# Read file names form index file
+	files=()
+	while read FILE
+	do
+		#echo $FILE
+		files+=("$FILE")
+	done < /tmp/$index
+
+ 	#for F in $(seq 0 $((${#files[*]} - 1))); do
+    #    echo "${files[$F]}"
+    #done
+ 	#for f in "${files[@]}"; do
+ 	#	echo "-- $f"
+ 	#done
+
+ 	# Download files
+	for ((i=1; i<=$times; i++)); do
+
+		echo "--"
+		echo "-- Iteration #$i"
+		echo "--"
+		for j in `shuf --input-range=0-$(( ${#files[*]} - 1 )) | head -${N}`; do
+    		echo "-- Getting file ${files[$j]}"
+    		rm -f "/tmp/${files[$j]}"
+    		wget -P /tmp "$proto://$server:$port/${files[$j]}"
+    	done
+	done
+
+}
+
+show_menu(){
+	
+	echo -e "\n-----------------------\n-- SoloWAN test menu --\n-----------------------"
+	echo -e "\nDefault values:"
+	echo -e "  Proto://Server:Port = $proto://$server:$port"
+	echo -e "  # of repetitions    = $times"
+	echo -e "  Index filename      = $index"
+	echo -e "  Filename            = $file"
+	echo -e "\nSelect an option:"
+	echo -e "   1) Get a file"
+	echo -e "   2) Get files listed in an index file"
+	echo -e "   3) Get a list of files in server"
+	echo -e "   4) Change server name"
+	echo -e "   5) Change server port"
+	echo -e "   6) Change server protocol"
+	echo -e "   7) Change number of repetitions"
+
+}
+
+function solowan-test-interactive {
+
+	index=index.txt
+	server=h2
+
+	prompt="\nType option number or 'q' to quit: "
+
+#	select opt in "${options[@]}"; do 
+	while true; do
+
+	    show_menu
+	    echo -n -e "$prompt"
+	    read choice
+
+	    case "$choice" in
+
+	    1)  echo -n "Type the name of file [$file]: "
+	    	read newfile
+	    	if [[ ! -z $newfile ]] ; then
+	    		#echo "No esta vacio (newfile=$newfile)"
+	    		file=$newfile
+	    	#else
+	    		#echo "Si esta vacio"
+	    		#echo "file=$file"
+	    		#echo "newfile=$newfile"
+	    	fi
+        	echo -e "--\n-- Getting file $file\n--"
+			get_file
+	        ;;
+
+	    2)  echo -n "Type the name of index file [$index]: "
+	    	read newindex
+	    	if [[ ! -z $newindex ]] ; then
+	    		#echo "No esta vacio (newindex=$newindex)"
+	    		index=$newindex
+	    	#else
+	    		#echo "Si esta vacio"
+	    		#echo "index=$index"
+	    		#echo "newindex=$newindex"
+	    	fi
+        	echo "-- Getting files listed in index file $index"
+			get_files_in_index
+	        ;;
+
+	    3)  echo -e "\n -- Files available in server $server:$port\n"
+	        curl $server:$port -s | w3m -dump -T text/html -O iso-8859-1
+                echo ""
+                read -p "-- Press any key to continue..."
+	    	;;
+
+	    4)  echo -n "Type the name of new server [$server]: "
+	    	read newserver
+	    	if [[ -z $newserver ]] ; then
+            	echo "\nServer name not changed.\n"
+            	sleep 2
+            	continue
+        	fi
+			echo -e "\n-- Checking connectivity with server:  ping -c 1 $newserver"
+			ping -c 1 -w 3 $newserver
+			if [ $? -ne 0 ]; then
+				echo "ERROR: cannot ping server $newserver. Server not changed."
+            	sleep 2
+				continue
+			fi
+			server=$newserver
+	        ;;
+
+	    5)  echo -n "Type the new server port value [$port]: "
+	    	read newport
+	    	if [[ ! -z $newport && ( $newport -le 0  || $newport -ge 65536 ) ]] ; then
+            	echo -e "\nERROR: New port value ($newport) is invalid; port must satisfy 0<p<65536.\n"
+            	sleep 2
+            	continue
+        	fi
+        	if [[ ! -z $newport ]]; then
+				port=$newport
+			fi
+	        ;;
+
+	    6)  echo -n "Type the new server protocol value [$proto]: "
+	    	read newproto
+	    	if [[ ! -z $newroto && ( $newproto != 'http' || $newproto != 'ftp' ) ]]; then
+	        	echo -e "\nERROR: Invalid protocol specified ($newproto); must be 'http' or 'ftp'.\n" >&2
+            	sleep 2
+            	continue
+        	fi
+        	if [[ ! -z $newproto ]]; then
+				proto=$newproto
+			fi
+	        ;;
+
+	    7)  echo -n "Type the number of repetitions [$times]: "
+	    	read newtimes
+	    	if [[ ! -z $newtimes && $newtimes -le 0 ]] ; then
+            	echo "New number of repetitions ($newtimes) not valid, please try again."
+            	echo ""
+            	sleep 2
+            	continue
+        	fi
+        	if [[ ! -z $newtimes ]]; then
+				times=$newtimes
+			fi
+	        ;;
+
+	    q|Q) echo "Goodbye..."; break;;
+
+ 	    *) echo "Invalid option. Try another one.";continue;;
+
+	    esac
+
+	done
+
+
+
+}
+
+
+
+# Main
+
+USAGE="
+solowan-test: download a set of files from server using http or ftp to test opennop-solowan WAN optimizator
+
+Usage:  solowan-test -s <server> -i <index_file> [-t <times>]
+        solowan-test -s <server> -f <file>  [-t <times>]
+        
+Options:    -s <server>     -> server to download files from
+            -p <port>       -> server port (0<p<65536, defaults to 80 for http and 21 for ftp)
+            -r <proto>      -> protocol to access server (ftp or http, defaults to http)
+            -i <index_file> -> name of index file that contains a list of files to download 
+                               (defaults to index.txt)
+            -f <file>       -> file to download from server
+            -t <times>      -> number of times to repeat the download (optional, default value once)
+            -h              -> show this help
+            when neither -f nor -i options are specified, solowan-test will start in interactive mode            
+
+Examples:
+
+  # Start in interactive mode with default values
+  solowan-test   
+
+  # Start in interactive mode setting server to h2, number of repetitions to 4 and protocol to ftp
+  solowan-test -s h2 -t 4 -r ftp  
+
+  # Download four times the file random4.out from h2 server using ftp
+  solowan-test -s h2 -t 4 -r ftp -f random4.out
+
+  # Download four times the files listes in index file index.txt using http from port 8080 of server h2
+  solowan-test -s h2 -t 4 -r http -p 8080 -i index.txt
+ 
+"
+
+# Default values
+index=''
+times=1
+port=80
+proto=http
+
+# Parse command line options
+while getopts ":s:p:r:f:i:t:h" opt; do
+    case $opt in
+
+    s)
+        server="$OPTARG"
+        ;;
+    p)
+        port="$OPTARG"
+    	if [[ ! $port -gt 0 || ! $port -lt 65536 ]]; then 
+	        echo -e "\nERROR: Invalid port value ($OPTARG); port must satisfy 0<p<65536.\n" >&2
+	        exit 1
+	    fi
+        ;;
+    r)
+        proto="$OPTARG"
+    	if [[ $proto != 'http' && $proto != 'ftp' ]]; then 
+	        echo -e "\nERROR: Invalid protocol specified ($OPTARG); must be 'http' or 'ftp'.\n" >&2
+	        exit 1
+	    fi
+    	if [[ $proto == 'ftp' ]]; then 
+    		port=21
+    	fi
+        ;;
+    f)
+        file="$OPTARG"
+        ;;
+    i)
+        index="$OPTARG"
+        ;;
+    t)
+        times="$OPTARG"
+        ;;
+
+    h)
+		echo ""
+		echo "$USAGE"
+                exit 0
+		;;
+    \?)
+		echo ""
+        echo "ERROR: Invalid option -$OPTARG" >&2
+        echo "$USAGE"
+        exit 1
+        ;;
+    :)
+        echo "Option -$OPTARG requires an argument." >&2
+        exit 1
+        ;;
+
+    esac
+done
+
+if [[ $index != "" && $file != "" ]]; then 
+	echo ""
+	echo "ERROR: -f and -i cannot be selected at the same time."
+	echo ""
+	echo "$USAGE"
+	exit 1
+fi
+
+if [[ ( $file || $index ) && $server == "" ]]; then
+	echo "ERROR: server not specified (use -s option)."
+	echo ""
+	echo "$USAGE"
+	exit 1
+fi
+
+
+echo -e "\n--------------------------------------------------------"
+echo -e "-- SoloWAN command line test tool"
+echo -e "--------------------------------------------------------"
+
+if [[  $server  ]]; then
+	echo -e "--\n-- Checking connectivity with server:  ping -c 1 $server"
+	res=$( ping -c 1 -w 3 $server | grep rtt)
+	if [ $? -ne 0 ]; then
+		echo "--   ERROR: cannot ping server $server."
+		exit 1
+	else
+		echo "--   OK: server $server accesible ($res)."
+	fi
+fi
+
+#echo "server=$server, index=$index, file=$file, times=$times"
+
+if [[ $file ]]; then
+
+	echo -e "--\n-- Getting file $file from server $server:$port"
+	get_file
+
+elif [[ $index ]]; then 
+
+	echo -e "--\n-- Getting files listed in index file $index form server $server:$port"
+	get_files_in_index
+
+else
+	
+	solowan-test-interactive
+
+fi

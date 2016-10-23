@@ -1,0 +1,176 @@
+#!/bin/bash
+
+#
+# Name: create-rootfs
+#
+# Description: creates a customized LXC VNX rootfs starting from a basic VNX LXC rootfs
+#
+# This file is part of VNX package.
+#
+# Authors: David Fernández (david@dit.upm.es)
+#          Raúl Álvarez (raul.alvarez@centeropenmiddleware.com)
+#
+# Copyright (C) 2015 DIT-UPM
+#           Departamento de Ingenieria de Sistemas Telematicos
+#           Universidad Politecnica de Madrid
+#           SPAIN
+#           
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+#
+# An online copy of the licence can be found at http://www.gnu.org/copyleft/gpl.html
+#
+
+# 
+# Configuration
+#
+
+BASEROOTFSNAME="vnx_rootfs_lxc_ubuntu64-14.04-v025"
+ROOTFSNAME="vnx_rootfs_lxc_ubuntu64-14.04-v025-solowan"
+ROOTFSLINKNAME="rootfs_lxc-solowan"
+PACKAGES="iptables software-properties-common build-essential autoconf autogen psmisc libnetfilter-queue-dev apache2 wget iperf uml-utilities libreadline-dev gdb git iperf munin nginx unzip telnet xterm curl w3m python-pyftpdlib ftp ethtool lftp nodejs nodejs-legacy npm liblog4c-dev"
+PPA="ppa:openjdk-r/ppa"
+PPA_PACKAGES="openjdk-8-jdk"
+
+function customize_rootfs {
+
+  # Remove startup scripts
+  lxc-attach -n MV -- update-rc.d -f apache2 remove
+  lxc-attach -n MV -- update-rc.d -f nginx remove
+  lxc-attach -n MV -- echo manual > /etc/init/munin-node.override
+
+  # Modify failsafe script to avoid delays on startup
+  lxc-attach -n MV -- sed -i -e 's/.*sleep [\d]*.*/\tsleep 1/' /etc/init/failsafe.conf
+
+  # Add ~/bin to root PATH
+  lxc-attach -n MV -- sed -i -e '$aPATH=$PATH:~/bin' /root/.bashrc
+
+  # Allow root login by ssh
+  lxc-attach -n MV -- sed -i -e 's/^PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+  # Install websocketd
+  lxc-attach -n MV -- wget -P /tmp https://github.com/joewalnes/websocketd/releases/download/v0.2.9/websocketd-0.2.9-linux_amd64.zip
+  lxc-attach -n MV -- unzip -d /tmp /tmp/websocketd-0.2.9-linux_amd64.zip
+  lxc-attach -n MV -- mv /tmp/websocketd /usr/local/bin/
+
+}
+
+
+#
+# Do not modify under this line (or do it with care...)
+#
+
+function create_new_rootfs {
+
+  # move to the directory where the script is located
+  CDIR=`dirname $0`
+  cd $CDIR
+  CDIR=$(pwd)
+
+  echo "-----------------------------------------------------------------------"
+  echo "Deleting base and new rootfs directories..."
+  rm -rf ${BASEROOTFSNAME}
+  rm -rf ${ROOTFSNAME}
+  rm -f ${BASEROOTFSNAME}.tgz
+  rm -f ${ROOTFSLINKNAME}
+
+  # Download base rootfs
+  echo "-----------------------------------------------------------------------"
+  echo "Downloading base rootfs..."
+  vnx_download_rootfs -r ${BASEROOTFSNAME}.tgz
+
+  # Change rootfs config to adapt it to the directory where is has been downloaded
+  mv ${BASEROOTFSNAME} ${ROOTFSNAME}
+  echo "--"
+  echo "Changing rootfs config file..."
+  sed -i -e '/lxc.rootfs/d' -e '/lxc.mount/d' ${ROOTFSNAME}/config
+  echo -e "lxc.rootfs = $CDIR/${ROOTFSNAME}/rootfs\nlxc.mount = $CDIR/${ROOTFSNAME}/fstab" >> ${ROOTFSNAME}/config
+
+}
+
+function start_and_install_packages {
+
+  echo "-----------------------------------------------------------------------"
+  echo "Installing packages in rootfs..."
+
+  # Install packages in rootfs
+  lxc-create -t none -n MV -f ${ROOTFSNAME}/config
+  lxc-start --daemon -n MV -f ${ROOTFSNAME}/config
+  lxc-wait -n MV -s RUNNING
+  sleep 3
+  lxc-attach -n MV -- dhclient eth0
+  lxc-attach -n MV -- ifconfig eth0
+  lxc-attach -n MV -- ping -c 3 www.dit.upm.es
+  lxc-attach -n MV -- apt-get update
+  lxc-attach -n MV -- bash -c "DEBIAN_FRONTEND=noninteractive apt-get -y install $PACKAGES"
+  lxc-attach -n MV -- add-apt-repository -y $PPA
+  lxc-attach -n MV -- apt-get update
+  lxc-attach -n MV -- bash -c "DEBIAN_FRONTEND=noninteractive apt-get -y install $PPA_PACKAGES"
+
+  # Create /dev/net/tun device
+  lxc-attach -n MV -- mkdir /dev/net 
+  lxc-attach -n MV -- mknod /dev/net/tun c 10 200 
+  lxc-attach -n MV -- chmod 666 /dev/net/tun 
+
+}
+
+function create_rootfs_tgz {
+
+  echo "-----------------------------------------------------------------------"
+  echo "Creating rootfs tgz file..."
+  rm $BASEROOTFSNAME.tgz
+  tmpfile=$(mktemp)
+  find ${ROOTFSNAME} -type s > $tmpfile 
+  size=$(du -sb --apparent-size ${ROOTFSNAME} | awk '{ total += $1 - 512; }; END { print total }')
+  size=$(( $size * 1020 / 1000 ))
+  LANG=C tar -cpf - ${ROOTFSNAME} -X $tmpfile | pv -p -s $size | gzip > ${ROOTFSNAME}.tgz
+  for LINK in $ROOTFSLINKNAME; do
+    rm -f $LINK
+    ln -s ${ROOTFSNAME} $LINK
+  done
+
+}
+
+function create_example_files {
+
+  echo "-----------------------------------------------------------------------"
+  echo "Creating example files (random,redundant,silesia)..."
+  ./../conf/hx/content-base/make-content
+
+}
+
+
+#
+# Main
+#
+
+echo "-----------------------------------------------------------------------"
+echo "Creating VNX LXC rootfs:"
+echo "  Base rootfs:  $BASEROOTFSNAME"
+echo "  New rootfs:   $ROOTFSNAME"
+echo "  Rootfs link:  $ROOTFSLINKNAME"
+echo "  Packages to install: $PACKAGES"
+echo "  PPA to add: $PPA"
+echo "  PPA packages to install: $PPA_PACKAGES"
+echo "-----------------------------------------------------------------------"
+
+create_new_rootfs
+start_and_install_packages 
+customize_rootfs
+lxc-stop -n MV  # Stop the VM
+create_rootfs_tgz
+create_example_files
+
+echo "...done"
+echo "-----------------------------------------------------------------------"

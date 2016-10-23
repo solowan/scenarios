@@ -1,0 +1,12 @@
+silesia/dickens
+silesia/mozilla
+silesia/mr
+silesia/nci
+silesia/ooffice
+silesia/osdb
+silesia/reymont
+silesia/samba
+silesia/sao
+silesia/webster
+silesia/xml
+silesia/x-ray

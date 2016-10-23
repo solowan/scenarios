@@ -1,0 +1,4 @@
+#!/bin/bash
+
+while true; do ./gst o1 d "Total input" "Total output" "Processed packets"  "Uncompressed packets" | tr -d '\n';
+sleep 2; done | dialog --trim --progressbox 'Optimizer 1' 8 70

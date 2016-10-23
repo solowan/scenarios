@@ -1,0 +1,8 @@
+<vnx_cfg>
+<vm name="wanem" win="550,600,700,400" status="minimized"/>
+<vm name="o1" win="200,475,700,400"/>
+<vm name="o2" win="900,475,700,400"/>
+<vm name="h1" win="0,0,800,400"/>
+<vm name="h2" win="1000,0,800,400"/>
+<vm name="sta" win="500,0,800,400" status="minimized"/>
+</vnx_cfg>

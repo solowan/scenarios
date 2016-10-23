@@ -1,0 +1,760 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+
+~~~~~~~~~~~~~~~~~~~
+VNX scenario
+~~~~~~~~~~~~~~~~~~~
+
+Name:       OpenNOP_Test_Scenario 
+Version:    03
+Description: Basic scenario for testing OpenNOP capabilities. 
+
+This file is part of the Virtual Networks over LinuX (VNX) Project distribution. 
+(www: http://www.dit.upm.es/vnx - e-mail: vnx@dit.upm.es) 
+
+Departamento de Ingenieria de Sistemas Telematicos (DIT)
+Universidad Politecnica de Madrid
+SPAIN
+
+-->
+
+<vnx xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="/usr/share/xml/vnx/vnx-2.00.xsd">
+  <global>
+    <version>2.0</version>
+    <scenario_name>opennop-lxc</scenario_name>
+    <ssh_key>/root/.ssh/id_rsa.pub</ssh_key>
+    <automac/>
+    <vm_mgmt type="private" network="10.250.0.0" mask="24" offset="200">
+       <host_mapping />
+    </vm_mgmt>
+    <vm_defaults>
+        <console id="0" display="no"/>
+        <console id="1" display="yes"/>
+    </vm_defaults>
+
+    <!-- Sequence related to opennop -->
+    <cmd-seq seq='reloadmod'>unload,compmod,loadmod</cmd-seq>
+    <cmd-seq seq='reloaddaemon'>stopdaemon,compdaemon,startdaemon</cmd-seq>
+    <cmd-seq seq='reconfdaemon'>reconf-opennop,stopdaemon,startdaemon</cmd-seq>
+
+    <!-- Sequence related to SSH tunnel -->
+    <cmd-seq seq='start-tunnel'>createtunnel,addtunnelroute</cmd-seq>
+    <cmd-seq seq='stop-tunnel'>deltunnelroute,deletetunnel</cmd-seq>
+
+    <!-- Sequence related to iptables rules -->
+    <cmd-seq seq='start-iptables'>unloadiptables,loadiptables</cmd-seq>
+
+    <!-- Sequence related to statistics -->
+    <cmd-seq seq='start-statistics'>start-collector,start-proxy,start-management</cmd-seq>    
+    <cmd-seq seq='start-collector'>stop-collector,install-collector,run-collector</cmd-seq>
+    <cmd-seq seq='start-proxy'>stop-proxy,install-proxy,run-proxy</cmd-seq>
+    <cmd-seq seq='start-management'>stop-management,install-management,run-management</cmd-seq>
+
+    <!-- Sequence related to start scenario -->
+    <cmd-seq seq='start-all'>emula,copycode,copyconf,reloaddaemon,start-http,start-ftp,start-mgmt,start-statistics</cmd-seq>
+    <cmd-seq seq='start-all-mod'>emula,copycode,copyconf,reloadmod,reloaddaemon,start-http,start-mgmt</cmd-seq>
+    <cmd-seq seq='start-demo'>emula,copycode,copyconf,loadiptables,load-opennop-demo-conf,reloaddaemon,start-http,start-ftp,start-mgmt,start-statistics</cmd-seq>
+  </global>
+
+
+  <net name="LanA"   mode="virtual_bridge" />
+  <net name="LanB"   mode="virtual_bridge" />
+  <net name="Lan0"   mode="virtual_bridge" />
+  <net name="Lan1"   mode="virtual_bridge" />
+  <net name="LanSta" mode="virtual_bridge" />
+  <net name="virbr0" mode="virtual_bridge" managed="no"/>
+
+
+  <vm name="o1" type="lxc" arch="x86_64">
+    <filesystem type="cow">filesystems/rootfs_lxc-solowan</filesystem>
+    <shareddir root="/root/opennop/">../../opennop/</shareddir>
+    <if id="1" net="LanA">
+      <ipv4>192.168.0.1/24</ipv4>
+    </if>
+    <if id="2" net="Lan0">
+      <ipv4>10.0.0.2/29</ipv4>
+    </if>
+    <if id="9" net="virbr0">
+      <ipv4>dhcp</ipv4>
+    </if>
+    <route type="ipv4" gw="10.0.0.1">10.0.0.0/16</route>
+    <route type="ipv4" gw="10.0.0.1">192.168.0.0/16</route>
+    <route type="ipv4" gw="10.0.0.1">192.168.100.0/24</route>
+    <forwarding type="ip" />
+
+    <!-- Copy /etc/hosts file -->
+    <filetree seq="on_boot" root="/tmp/">conf/hosts</filetree>
+    <!-- Copy scripts -->
+    <filetree seq="on_boot" root="/root/bin/">conf/o1/scripts/</filetree>
+    <!-- Copy /opt/dashboard -->
+    <filetree seq="on_boot" root="/opt/dashboard/">conf/o1/dashboard/</filetree>
+    <!-- Copy ssh files -->
+    <filetree seq="on_boot" root="/root/.ssh/" perms="600">./conf/o1/ssh/</filetree>
+    <!-- Add host entries to /etc/host -->
+    <exec seq="on_boot" type="verbatim">
+        cat /tmp/hosts >> /etc/hosts;
+        rm /tmp/hosts;
+    </exec>
+    <!-- SSH configuration -->
+    <exec seq="on_boot" type="verbatim">
+        echo "PermitTunnel yes" >> /etc/ssh/sshd_config;
+        service ssh restart;
+        cat /root/.ssh/authorized_keys.add >> /root/.ssh/authorized_keys;
+        rm /root/.ssh/authorized_keys.add;
+    </exec>
+    <!-- tcp offloading issue -->
+    <exec seq="on_boot" type="verbatim">
+        ethtool -K eth1 gso off gro off tso off;  
+        ethtool -K eth2 gso off gro off tso off;
+    </exec>
+ 
+
+    <!-- Copy opennop files -->
+    <!-- <filetree seq="copycode" root="/root/opennop/">./../../opennop/</filetree> -->
+    <filetree seq="copycode" root="/root/bin/">./conf/opennop/</filetree>
+
+    <!-- Load opennop.conf -->
+    <filetree seq="copyconf" root="/etc/opennop/">./conf/o1/opennop.conf</filetree>
+    <filetree seq="copyconf" root="/etc/opennop/" perms="755">./conf/o1/opennop-addflows.sh</filetree>
+    <filetree seq="copyconf" root="/etc/opennop/" perms="755">./conf/o1/opennop-delflows.sh</filetree>
+    <filetree seq="copyconf" root="/etc/opennop/">./conf/o1/log4crc</filetree>
+    <exec seq="copyconf" type="verbatim">
+        cp /root/opennop/opennop-daemon/etc/init.d/solowan /etc/init.d/
+        chmod +x /etc/init.d/solowan
+        cp /root/opennop/opennop-daemon/scripts/solowan_* /root/bin
+        chmod +x /root/bin/solowan_*
+    </exec>
+
+    <filetree seq="load-opennop-demo-conf" root="/etc/opennop/opennop.conf">./conf/o1/opennop-demo.conf</filetree>
+    <filetree seq="reconf-opennop" root="/etc/opennop/opennop.conf">./conf/o1/opennop.conf.o1.reconf</filetree>
+
+    <!-- Start Opennop management -->
+    <filetree seq="start-mgmt" root="/usr/share/munin/plugins/">conf/o1/optimizadorC</filetree>
+    <filetree seq="start-mgmt" root="/usr/share/munin/plugins/">conf/o1/optimizadorD</filetree>
+
+    <!-- Copy collector files -->
+    <filetree seq="install-collector" root="/var/collector/">../../dashboard/collector/releases/latest/</filetree>
+    <filetree seq="install-collector" root="/var/collector/conf/">conf/o1/dashboard/conf.json</filetree>
+    
+    <!-- Copy management module files: Comment in Development version  -->
+    <filetree seq="install-management" root="/var/management/">../../dashboard/management/releases/latest/</filetree>
+    <filetree seq="install-management" root="/var/management/conf/">conf/o1/management/conf.json</filetree>
+    <!-- OpenNOP module -->
+    <exec seq="compmod"   type="verbatim" ostype="system">
+        cd /root/opennop/opennop-module;
+        make >> /var/log/vnx.log
+    </exec>
+    <exec seq="loadmod"   type="verbatim" ostype="system">modprobe opennopdrv >> /var/log/vnx.log</exec>
+    <exec seq="unloadmod" type="verbatim" ostype="system">rmmod opennopdrv >> /var/log/vnx.log</exec>
+
+    <!-- OpenNOP iptables rules -->
+    <exec seq="loadiptables"   type="verbatim" ostype="system">
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --sport 80 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --dport 80 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --sport 21 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --dport 21 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --sport 9000:9499 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --dport 9000:9499 >> /var/log/vnx.log;
+    </exec>
+
+    <exec seq="unloadiptables"   type="verbatim" ostype="system">
+        iptables -X >> /var/log/vnx.log;
+        iptables -F >> /var/log/vnx.log;
+    </exec>
+
+    <!-- OpenNOP daemon: The compilation only is necesary in o1 because it is in a shared directory.  -->
+    <exec seq="compdaemon"   type="verbatim" ostype="system">
+        cd /root/opennop/opennop-daemon;
+        make clean >> /var/log/vnx.log 2>&amp;1 ;
+        ./autogen.sh >> /var/log/vnx.log 2>&amp;1 ;
+        ./configure >> /var/log/vnx.log 2>&amp;1 ;
+        make >> /var/log/vnx.log 2>&amp;1 ;
+        make install >> /var/log/vnx.log 2>&amp;1 ;
+        #sed -i -e '/^memory/d' /etc/opennop/opennop.conf;
+        sed -i -e 's/^thrnum.*/thrnum 1/' /etc/opennop/opennop.conf;
+        #echo "memory 24576000" >> /etc/opennop/opennop.conf;
+    </exec>
+
+    <exec seq="startdaemon"  type="verbatim" ostype="system">
+        #/usr/local/sbin/opennopd -n >> /var/log/opennop.log &amp;
+        service solowan start
+    </exec>
+
+    <exec seq="stopdaemon"   type="verbatim" ostype="system">
+        #killall -9 /usr/local/sbin/opennopd
+        service solowan stop
+    </exec>
+
+    <!-- Create SSH tunnel among optimizers -->
+    <exec seq="createtunnel"  type="verbatim" ostype="system">
+        ssh -o StrictHostKeyChecking=no -f -w any 10.0.0.10 true;
+        sleep 3;
+        ifconfig tun0 10.10.10.1/24 up;
+    </exec>
+
+    <!-- Delete the SSH tunnel -->
+    <exec seq="deletetunnel"  type="verbatim" ostype="system">
+        pkill -f "ssh -o StrictHostKeyChecking=no -f -w any"
+    </exec>
+
+    <!-- Route traffic through tunnel -->
+    <exec seq="addtunnelroute"  type="verbatim" ostype="system">
+        ip route del 192.168.0.0/16
+        ip route add 192.168.0.0/16 dev tun0
+    </exec>
+
+    <!-- Do NOT route traffic through tunnel -->
+    <exec seq="deltunnelroute"  type="verbatim" ostype="system">
+        ip route del 192.168.0.0/16 dev tun0
+        ip route add 192.168.0.0/16 via 10.0.0.1
+    </exec>
+
+    <!-- Add munin-node configuration  -->
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        sed -i 's/allow ^127\\.0\\.0\\.1\$/allow ^192\\.168\\.100\\.10\$/' /etc/munin/munin-node.conf
+    </exec>
+
+    <!-- To enable opennop plugins for Munin   --> 
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        chmod +x /usr/share/munin/plugins/optimizador*;
+        unlink /etc/munin/plugins/apache_accesses;
+        unlink /etc/munin/plugins/apache_processes;
+        unlink /etc/munin/plugins/apache_volume;
+        unlink /etc/munin/plugins/users;
+        unlink /etc/munin/plugins/swap;
+        chown munin:munin -R /var/lib/munin/;
+        chown munin:munin -R /var/log/munin/;
+        chown munin:munin -R /var/run/munin/;
+        ln -s /usr/share/munin/plugins/optimizadorC /etc/munin/plugins;
+        ln -s /usr/share/munin/plugins/optimizadorD /etc/munin/plugins;    
+        echo "" >> /etc/munin/plugin-conf.d/munin-node;
+        echo "[optimiz*]" >> /etc/munin/plugin-conf.d/munin-node;
+        echo "user root" >> /etc/munin/plugin-conf.d/munin-node;
+    </exec>
+
+    <!-- Configure Websocketd   -->  
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        /root/bin/websockets.sh > /var/log/websockets.log &amp;
+        service munin-node restart;
+        service nginx restart;
+    </exec>
+
+    <!-- Install stadistics server (Nodejs)  -->  
+    <exec seq="install-collector" type="verbatim" ostype="system">
+        cd /var/collector;
+        npm install;
+        chmod +x server_io.js;
+    </exec>  
+
+    <!-- Run stadistics server (Nodejs)  -->  
+    <exec seq="run-collector" type="verbatim" ostype="system">
+        cd /var/collector/
+        ./server_io.js &amp;
+    </exec>  
+
+    <!-- Stop stadistics server (Nodejs)  -->  
+    <exec seq="stop-collector" type="verbatim" ostype="system">
+        killall -9 server_io.js
+    </exec>
+
+    <!-- Stop management module (Nodejs)-->
+    <exec seq="stop-management" type="verbatim" ostype="system">
+    	killall -9 management.js
+    </exec>
+
+    <!-- Install management module (Nodejs)-->
+    <exec seq="install-management" type="verbatim" ostype="system">
+    	cd /var/management;
+    	npm install;
+    	chmod +x management.js;
+    </exec>
+
+    <!-- Run management module (Nodejs)-->
+    <exec seq="run-management" type="verbatim" ostype="system">
+    	cd /var/management
+    	./management.js &amp;
+    </exec>
+
+  </vm>
+
+
+  <vm name="o2" type="lxc" arch="x86_64">
+    <filesystem type="cow">filesystems/rootfs_lxc-solowan</filesystem>
+    <shareddir root="/root/opennop/">../../opennop/</shareddir>
+    <if id="1" net="LanB">
+      <ipv4>192.168.1.1/24</ipv4>
+    </if>
+    <if id="2" net="Lan1">
+      <ipv4>10.0.0.10/29</ipv4>
+    </if>
+    <if id="3" net="LanSta">
+      <ipv4>192.168.100.4/24</ipv4>
+    </if>
+    <if id="9" net="virbr0">
+      <ipv4>dhcp</ipv4>
+    </if>
+    <route type="ipv4" gw="10.0.0.9">10.0.0.0/16</route>
+    <route type="ipv4" gw="10.0.0.9">192.168.0.0/16</route>
+    <forwarding type="ip" />
+
+    <!-- Copy /etc/hosts file -->
+    <filetree seq="on_boot" root="/tmp/">conf/hosts</filetree>
+    <!-- Copy scripts -->
+    <filetree seq="on_boot" root="/root/bin/">conf/o2/scripts/</filetree>
+    <!-- Copy /opt/dashboard -->
+    <filetree seq="on_boot" root="/opt/dashboard/">conf/o2/dashboard/</filetree>
+    <!-- Copy ssh files -->
+    <filetree seq="on_boot" root="/root/.ssh/" perms="600">./conf/o2/ssh/</filetree>
+    <!-- Add host entries to /etc/host -->
+    <exec seq="on_boot" type="verbatim">
+        cat /tmp/hosts >> /etc/hosts;
+        rm /tmp/hosts;
+    </exec>
+    <!-- SSH configuration -->
+    <exec seq="on_boot" type="verbatim">
+        echo "PermitTunnel yes" >> /etc/ssh/sshd_config;
+        service ssh restart;
+        cat /root/.ssh/authorized_keys.add >> /root/.ssh/authorized_keys;
+        rm /root/.ssh/authorized_keys.add;
+    </exec>
+    <!-- tcp offloading issue -->
+    <exec seq="on_boot" type="verbatim">
+	    ethtool -K eth1 gso off gro off tso off;  
+	    ethtool -K eth2 gso off gro off tso off;
+    </exec>
+
+
+    <!-- <filetree seq="copycode" root="/root/opennop/">./../../opennop/</filetree> -->
+    <filetree seq="copycode" root="/root/bin/">./conf/opennop/</filetree>
+
+    <!-- Load opennop.conf -->
+    <filetree seq="copyconf" root="/etc/opennop/">./conf/o2/opennop.conf</filetree>
+    <filetree seq="copyconf" root="/etc/opennop/" perms="755">./conf/o2/opennop-addflows.sh</filetree>
+    <filetree seq="copyconf" root="/etc/opennop/" perms="755">./conf/o2/opennop-delflows.sh</filetree>
+    <filetree seq="copyconf" root="/etc/opennop/">./conf/o2/log4crc</filetree>
+    <exec seq="copyconf" type="verbatim">
+        cp /root/opennop/opennop-daemon/etc/init.d/solowan /etc/init.d/
+        chmod +x /etc/init.d/solowan
+        cp /root/opennop/opennop-daemon/scripts/solowan_* /root/bin
+        chmod +x /root/bin/solowan_*
+    </exec>
+
+    <filetree seq="load-opennop-demo-conf" root="/etc/opennop/opennop.conf">./conf/o2/opennop-demo.conf</filetree>
+    <filetree seq="reconf-opennop" root="/etc/opennop/opennop.conf">./conf/o2/opennop.conf.o2.reconf</filetree>
+
+    <!-- Start Opennop management -->
+    <filetree seq="start-mgmt" root="/usr/share/munin/plugins/">conf/o2/optimizadorC</filetree>
+    <filetree seq="start-mgmt" root="/usr/share/munin/plugins/">conf/o2/optimizadorD</filetree>
+
+    <!-- Copy collector files -->
+    <filetree seq="install-collector" root="/var/collector/">../../dashboard/collector/releases/latest/</filetree>
+    <filetree seq="install-collector" root="/var/collector/conf/">conf/o2/dashboard/conf.json</filetree>
+    
+    <!-- Copy management module files: Comment in Development version  -->
+    <filetree seq="install-management" root="/var/management/">../../dashboard/management/releases/latest/</filetree>
+    <filetree seq="install-management" root="/var/management/conf/">conf/o2/management/conf.json</filetree>
+
+    <!-- OpenNOP module -->
+    <exec seq="compmod"   type="verbatim" ostype="system">
+        cd /root/opennop/opennop-module;
+        make >> /var/log/vnx.log
+    </exec>
+    <exec seq="loadmod"   type="verbatim" ostype="system">modprobe opennopdrv >> /var/log/vnx.log</exec>
+    <exec seq="unloadmod" type="verbatim" ostype="system">rmmod opennopdrv >> /var/log/vnx.log</exec>
+
+    <!-- OpenNOP iptables rules -->
+    <exec seq="loadiptables"   type="verbatim" ostype="system">
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --sport 80 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --dport 80 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --sport 21 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --dport 21 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --sport 9000:9499 >> /var/log/vnx.log;
+        iptables -A FORWARD -j NFQUEUE --queue-num 0 -p TCP --dport 9000:9499 >> /var/log/vnx.log;
+    </exec>
+
+    <exec seq="unloadiptables"   type="verbatim" ostype="system">
+        iptables -X >> /var/log/vnx.log;
+        iptables -F >> /var/log/vnx.log;
+    </exec>
+
+    <!-- OpenNOP daemon: -->
+    <!--The compilation only is necesary in o1 because it is in a shared directory.  -->
+    <exec seq="compdaemon"   type="verbatim" ostype="system">
+        cd /root/opennop/opennop-daemon;
+        # vmake clean >> /var/log/vnx.log 2>&amp;1 ;
+        # ./autogen.sh >> /var/log/vnx.log 2>&amp;1 ;
+        # ./configure >> /var/log/vnx.log 2>&amp;1 ;
+        # make >> /var/log/vnx.log 2>&amp;1 ;
+        make install >> /var/log/vnx.log 2>&amp;1 ;
+        #sed -i -e '/^memory/d' /etc/opennop/opennop.conf;
+        sed -i -e 's/^thrnum.*/thrnum 1/' /etc/opennop/opennop.conf;
+        #echo "memory 24576000" >> /etc/opennop/opennop.conf;
+    </exec>
+
+    <exec seq="startdaemon"  type="verbatim" ostype="system">
+        #/usr/local/sbin/opennopd -n >> /var/log/opennop.log &amp;
+        service solowan start
+    </exec>
+
+    <exec seq="stopdaemon"   type="verbatim" ostype="system">
+        #killall -9 /usr/local/sbin/opennopd
+        service solowan stop
+    </exec>
+
+    <!-- Create SSH tunnel among optimizers -->   
+    <exec seq="createtunnel"  type="verbatim" ostype="system">
+        ifconfig tun0 10.10.10.2/24 up
+    </exec>
+
+    <!-- Delete the SSH tunnel -->
+    <exec seq="deletetunnel"  type="verbatim" ostype="system">
+        pkill -f "ssh -o StrictHostKeyChecking=no -f -w any"
+    </exec>
+
+    <!-- Route traffic through tunnel -->
+    <exec seq="addtunnelroute"  type="verbatim" ostype="system">
+        ip route del 192.168.0.0/16
+        ip route add 192.168.0.0/16 dev tun0
+    </exec>
+
+    <!-- Do NOT route traffic through tunnel -->
+    <exec seq="deltunnelroute"  type="verbatim" ostype="system">
+        ip route del 192.168.0.0/16 dev tun0
+        ip route add 192.168.0.0/16 via 10.0.0.9
+    </exec>
+
+    <!-- Add munin-node configuration  -->
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        sed -i 's/allow ^127\\.0\\.0\\.1\$/allow ^192\\.168\\.100\\.10\$/' /etc/munin/munin-node.conf
+    </exec>
+
+    <!-- To enable opennop plugins for Munin   --> 
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        chmod +x /usr/share/munin/plugins/optimizador*;
+        unlink /etc/munin/plugins/apache_accesses;
+        unlink /etc/munin/plugins/apache_processes;
+        unlink /etc/munin/plugins/apache_volume;
+        unlink /etc/munin/plugins/users;
+        unlink /etc/munin/plugins/swap;
+        chown munin:munin -R /var/lib/munin/;
+        chown munin:munin -R /var/log/munin/;
+        chown munin:munin -R /var/run/munin/;
+        ln -s /usr/share/munin/plugins/optimizadorC /etc/munin/plugins;
+        ln -s /usr/share/munin/plugins/optimizadorD /etc/munin/plugins;    
+        echo "" >> /etc/munin/plugin-conf.d/munin-node;
+        echo "[optimiz*]" >> /etc/munin/plugin-conf.d/munin-node;
+        echo "user root" >> /etc/munin/plugin-conf.d/munin-node;
+    </exec>
+
+    <!-- Configure Websocketd   -->  
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        /root/bin/websockets.sh > /var/log/websockets.log &amp;
+        service munin-node restart;
+        service nginx restart;
+    </exec>
+
+    <!-- Install stadistics server (Nodejs)  -->  
+    <exec seq="install-collector" type="verbatim" ostype="system">
+        cd /var/collector
+        npm install
+        chmod +x server_io.js
+    </exec>  
+
+    <!-- Run stadistics server (Nodejs)  -->  
+    <exec seq="run-collector" type="verbatim" ostype="system">
+        cd /var/collector/
+        ./server_io.js &amp;
+    </exec>  
+
+    <!-- Stop stadistics server (Nodejs)  -->  
+    <exec seq="stop-collector" type="verbatim" ostype="system">
+        killall -9 server_io.js
+    </exec>
+
+    <!-- Stop management module (Nodejs)-->
+    <exec seq="stop-management" type="verbatim" ostype="system">
+    	killall -9 management.js
+    </exec>
+    
+    <!-- Install management module (Nodejs)-->
+    <exec seq="install-management" type="verbatim" ostype="system">
+    	cd /var/management
+    	npm install
+    	chmod +x management.js
+    </exec>
+
+    <!-- Run management module (Nodejs)-->
+    <exec seq="run-management" type="verbatim" ostype="system">
+    	cd /var/management
+    	./management.js &amp;
+    </exec>
+  </vm>
+
+
+  <vm name="h1" type="lxc" arch="x86_64">
+    <filesystem type="cow">filesystems/rootfs_lxc-solowan</filesystem>
+    <shareddir root="/var/www/">conf/hx/content/</shareddir>
+    <if id="1" net="LanA">
+      <ipv4>192.168.0.2/24</ipv4>
+    </if>
+    <if id="9" net="virbr0">
+      <ipv4>dhcp</ipv4>
+    </if>
+    <route type="ipv4" gw="192.168.0.1">10.0.0.0/16</route>
+    <route type="ipv4" gw="192.168.0.1">192.168.0.0/16</route>
+
+    <!-- Copy /etc/hosts file -->
+    <filetree seq="on_boot" root="/tmp/">conf/hosts</filetree>
+
+    <!-- Copy scripts and web content -->
+    <filetree seq="on_boot" root="/root/bin/">conf/hx/scripts/</filetree>
+    
+    <!-- Add host entries to /etc/host -->
+    <exec seq="on_boot" type="verbatim">
+        cat /tmp/hosts >> /etc/hosts;
+        rm /tmp/hosts;
+        sed -i -e 's#DocumentRoot /var/www/html#DocumentRoot /var/www#' /etc/apache2/sites-enabled/000-default.conf;
+        chmod +x /root/bin/*;
+        rm /root/bin/prueba-larga2.sh;
+    </exec>
+
+    <!-- tcp offloading issue -->
+    <exec seq="on_boot" type="verbatim">
+	ethtool -K eth1 gso off gro off tso off;  
+    </exec>
+
+    <exec seq="iperf_cl_no_opt" type="verbatim" ostype="exec">iperf -c 192.168.1.2 -t 150 -i 1 > /root/iperf_noopt_result.out</exec>
+
+    <exec seq="iperf_cl_opt" type="verbatim" ostype="exec">iperf -c 192.168.1.2 -t 150 -i 1 > /root/iperf_opt_result.out</exec>
+
+    <exec seq="wget_no_opt" type="verbatim" ostype="exec">/root/bin/wget_no_opt.sh</exec>
+   
+    <exec seq="wget_opt" type="verbatim" ostype="exec">/root/bin/wget_opt.sh</exec>
+
+    <exec seq="regimen" type="verbatim" ostype="system">wget 192.168.1.2/index.html</exec>
+
+    <exec seq="start-http" type="verbatim" ostype="system">killall iperf</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">cp /root/bin/ports.conf /etc/apache2/</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">service apache2 restart</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">chmod +r /var/www/random*</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">chmod +r /var/www/payload.txt</exec>
+
+    <exec seq="start-ftp" type="verbatim" ostype="system">
+        python -m pyftpdlib -d /var/www/ -p 21 -w -r 9000-9499 >> /var/log/ftp.log 2>&amp;1 &amp; 
+        python -m pyftpdlib -d /var/www/ -p 2121 -w -r 9500-9999 >> /var/log/ftp.log 2>&amp;1 &amp; 
+    </exec>
+  </vm>
+
+
+  <vm name="h2" type="lxc" arch="x86_64">
+    <filesystem type="cow">filesystems/rootfs_lxc-solowan</filesystem>
+    <shareddir root="/var/www/">conf/hx/content/</shareddir>
+    <if id="1" net="LanB">
+      <ipv4>192.168.1.2/24</ipv4>
+    </if>
+    <if id="9" net="virbr0">
+      <ipv4>dhcp</ipv4>
+    </if>
+    <route type="ipv4" gw="192.168.1.1">10.0.0.0/16</route>
+    <route type="ipv4" gw="192.168.1.1">192.168.0.0/16</route>
+
+    <!-- Copy /etc/hosts file -->
+    <filetree seq="on_boot" root="/tmp/">conf/hosts</filetree>
+
+    <!-- Copy scripts and web content -->
+    <filetree seq="on_boot" root="/root/bin/">conf/hx/scripts/</filetree>
+
+    <!-- Add host entries to /etc/host -->
+    <exec seq="on_boot" type="verbatim">
+        cat /tmp/hosts >> /etc/hosts
+        rm /tmp/hosts
+        sed -i -e 's#DocumentRoot /var/www/html#DocumentRoot /var/www#' /etc/apache2/sites-enabled/000-default.conf;
+        chmod +x /root/bin/*;
+        mv /root/bin/prueba-larga2.sh /root/bin/prueba-larga.sh;
+    </exec>
+
+    <!-- tcp offloading issue -->
+    <exec seq="on_boot" type="verbatim">
+	ethtool -K eth1 gso off gro off tso off;  
+    </exec>
+
+    <exec seq="iperfs" type="verbatim" ostype="system">killall iperf</exec>
+    <exec seq="iperfs" type="verbatim" ostype="system">service apache2 stop</exec>
+    <exec seq="iperfs" type="verbatim" ostype="exec">iperf -s > /root/iperfresult.out</exec>
+
+    <exec seq="start-http" type="verbatim" ostype="system">killall iperf</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">cp /root/bin/ports.conf /etc/apache2/</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">service apache2 restart</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">chmod +r /var/www/random*</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">chmod +r /var/www/payload.txt</exec>
+
+    <exec seq="start-ftp" type="verbatim" ostype="system">
+        python -m pyftpdlib -d /var/www/ -p 21 -w -r 9000-9499 >> /var/log/ftp.log 2>&amp;1 &amp; 
+        python -m pyftpdlib -d /var/www/ -p 2121 -w -r 9500-9999 >> /var/log/ftp.log 2>&amp;1 &amp; 
+    </exec>
+
+    <exec seq="regimen" type="verbatim" ostype="system">killall iperf</exec>
+
+    <exec seq="regimen" type="verbatim" ostype="system">service apache2 start</exec>
+ </vm>
+
+
+ <vm name="wanem" type="lxc" arch="x86_64">
+    <filesystem type="cow">filesystems/rootfs_lxc-solowan</filesystem>
+    <if id="1" net="Lan0">
+      <ipv4>10.0.0.1/29</ipv4>
+    </if>
+    <if id="2" net="Lan1">
+      <ipv4>10.0.0.9/29</ipv4>
+    </if>
+    <if id="9" net="virbr0">
+      <ipv4>dhcp</ipv4>
+    </if>
+    <route type="ipv4" gw="10.0.0.2">192.168.0.0/24</route>
+    <route type="ipv4" gw="10.0.0.10">192.168.0.0/16</route>
+ 
+    <forwarding type="ip" />
+
+    <!-- Copy /etc/hosts file -->
+    <filetree seq="on_boot" root="/tmp/">conf/hosts</filetree>
+
+    <!-- Copy scripts -->
+    <filetree seq="on_boot" root="/root/bin/">conf/wanem/scripts/</filetree>
+    <filetree seq="emula" root="/tmp/">./conf/wanem/</filetree>
+    <filetree seq="remula" root="/tmp/wanem.conf">./conf/wanem/wanem.conf.reconf</filetree>
+    
+    <!-- Add host entries to /etc/host -->
+    <exec seq="on_boot" type="verbatim">
+        cat /tmp/hosts >> /etc/hosts;
+        rm /tmp/hosts;
+    </exec>
+
+    <exec seq="emula,remula" type="verbatim" ostype="system">/tmp/configure.sh</exec>
+    <!--exec seq="remula" type="verbatim" ostype="system">/tmp/configure.sh</exec-->
+
+    <!-- Add munin-node configuration -->
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        unlink /etc/munin/plugins/apache_accesses;
+        unlink /etc/munin/plugins/apache_processes;
+        unlink /etc/munin/plugins/apache_volume;
+        unlink /etc/munin/plugins/users;
+        unlink /etc/munin/plugins/swap;
+        chown munin:munin -R /var/lib/munin/;
+        chown munin:munin -R /var/log/munin/;
+        chown munin:munin -R /var/run/munin/;
+    </exec>
+
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        sed -i 's/allow ^127\\.0\\.0\\.1\$/allow ^192\\.168\\.100\\.10\$/' /etc/munin/munin-node.conf;
+        service munin-node restart;
+    </exec>
+  </vm>
+
+
+  <vm name="sta" type="lxc" arch="x86_64">
+    <filesystem type="cow">filesystems/rootfs_lxc-solowan</filesystem>
+    <if id="1" net="LanSta">
+      <ipv4>192.168.100.10/24</ipv4>
+    </if>
+    <if id="9" net="virbr0">
+      <ipv4>dhcp</ipv4>
+    </if>
+    <route type="ipv4" gw="192.168.100.4">192.168.0.0/16</route>
+    <route type="ipv4" gw="192.168.100.4">10.0.0.0/16</route>
+    <forwarding type="ip" />
+
+    <!-- Copy /etc/hosts file -->
+    <filetree seq="on_boot" root="/tmp/">conf/hosts</filetree>
+
+    <!-- Copy scripts -->
+    <filetree seq="on_boot" root="/root/bin/">conf/sta/scripts/</filetree>
+
+    <!-- Start opennop management -->
+    <filetree seq="start-mgmt" root="/etc/nginx/sites-available/default">conf/sta/ngnix-default</filetree>
+    <filetree seq="start-mgmt" root="/etc/munin/">conf/sta/munin.conf</filetree>
+    
+    <!-- Copy monitor files -->
+    <filetree seq="start-mgmt" root="/var/www/solowan/">conf/sta/monitor</filetree>
+
+    <!-- Copy munin files -->
+    <filetree seq="load-data" root="/var/lib/munin/localdomain/">./conf/munin/localdomain.tar.gz</filetree>
+
+    <!-- Copy proxy files -->
+    <filetree seq="install-proxy" root="/var/proxy/java/">../../dashboard/proxy/releases/proxy-latest.tar.gz</filetree>
+    <!-- XXXX <filetree seq="install-proxy" root="/var/www/html/">../../dashboard/html/releases/latest/</filetree> -->
+    <filetree seq="install-proxy" root="/var/www/html/">../../dashboard/html/development/</filetree>
+    <filetree seq="install-proxy" root="/tmp/">conf/sta/dashboard/proxy.xml</filetree>
+    <filetree seq="install-proxy" root="/tmp/">conf/sta/dashboard/views.properties</filetree>
+
+    <exec seq="on_boot" type="verbatim">
+        cat /tmp/hosts >> /etc/hosts;
+        rm /tmp/hosts;
+    </exec>
+
+    <!-- Importing Munin Graph Data -->
+    <exec seq="load-data" type="verbatim" ostype="system">tar zxf /var/lib/munin/localdomain/localdomain.tar.gz</exec>
+    <exec seq="load-data" type="verbatim" ostype="system">for i in /var/lib/munin/localdomain/*.xml; do rrdtool restore "$i" "/var/lib/munin/localdomain/${i%.xml}"; done</exec>
+    <exec seq="load-data" type="verbatim" ostype="system">chmod -R 766 /var/lib/munin</exec>
+    <exec seq="load-data" type="verbatim" ostype="system">chown -R munin:munin /var/lib/munin</exec>
+    <exec seq="load-data" type="verbatim" ostype="system">service munin restart</exec> 
+
+    <!-- Enable Munin -->
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        mkdir -p /var/www/solowan;
+        mkdir -p /var/www/solowan/monitor;
+        chown munin:munin -R /var/www/solowan/;
+	chmod 755 -R /var/www/solowan/;
+        chown munin:munin -R /var/lib/munin/;
+        chown munin:munin -R /var/log/munin/;
+        chown munin:munin -R /var/run/munin/;
+    </exec>
+
+    <!-- Websocket start --> 
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+        /root/bin/websockets.sh > /var/log/websockets.log &amp;
+        service munin-node restart;
+        service nginx restart
+    </exec>
+
+    <!-- Web server start: Apache2. -->
+    <exec seq="start-http" type="verbatim" ostype="system">service apache2 restart</exec>
+     
+    <!-- Statistics proxy install -->
+    <exec seq="install-proxy" type="verbatim" ostype="system">
+        tar zxf /var/proxy/java/proxy-latest.tar.gz -C /var/proxy/java;
+        mv /tmp/proxy.xml /var/proxy/java/conf;
+        mv /tmp/views.properties /var/www/html/props;
+        /var/proxy/java/bin/install.sh
+    </exec>
+    
+	<!-- Management: HTTP proxy -->
+	<exec seq="install-management" type="verbatim">
+		cd /etc/apache2/
+		ln -sf /etc/apache2/mods-available/proxy.load mods-enabled/proxy.load 
+		ln -sf /etc/apache2/mods-available/proxy_http.load mods-enabled/proxy_http.load 
+		echo "ProxyPass /o1_management http://o1:4001" >> apache2.conf
+		echo "ProxyPass /o2_management http://o2:4001" >> apache2.conf
+		service apache2 restart
+	</exec>
+
+    <!-- Statistics proxy start -->
+    <exec seq="run-proxy" type="verbatim" ostype="system">/var/proxy/java/bin/statistics-proxy-service start</exec>
+
+    <!-- Statistics proxy stop -->
+    <exec seq="stop-proxy" type="verbatim" ostype="system">/var/proxy/java/bin/statistics-proxy-service stop</exec>
+  </vm>
+
+  <host>
+    <hostif net="LanSta">
+       <ipv4>192.168.100.11/24</ipv4>
+    </hostif>
+    <hostif net="LanA">
+      <ipv4>192.168.0.3/24</ipv4>
+    </hostif>
+    <route type="ipv4" gw="192.168.0.1">10.0.0.0/16</route>
+    <route type="ipv4" gw="192.168.0.1">192.168.0.0/16</route>
+  </host>
+
+</vnx>

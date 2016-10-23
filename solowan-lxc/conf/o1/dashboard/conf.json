@@ -1,0 +1,88 @@
+{
+  "port": 4000,
+  "serverConnections" :[
+    {
+      "path": "/LtW",
+      "commands": {
+        "total_input_bytes.value": {
+          "command": "opennop show workers | sed -n '17p' | awk '{print$4}'"
+        },
+        "total_output_bytes.value": {
+          "command": "opennop show workers | sed -n '17p' | awk '{print$6}'"
+        },
+        "comp_bytes.value": {
+          "command": "opennop show workers | sed -n '17p' | awk '{print$8}'"
+        },
+        "dedup_bytes.value": {
+          "command": "opennop show workers | sed -n '17p' | awk '{print$10}'"
+        },
+        "total_packets.value": {
+          "command": "opennop show workers | sed -n '17p' | awk '{print$12}'"
+        },
+        "comp_packets.value": {
+          "command": "opennop show workers | sed -n '17p' | awk '{print$14}'"
+        },
+        "dedup_packets.value": {
+          "command": "opennop show workers | sed -n '17p' | awk '{print$16}'"
+        },
+        "comp&dedup_packets.value": {
+          "command": "opennop show workers | sed -n '17p' | awk '{print$18}'"
+        }
+      }
+    },
+    {
+      "path": "/WtL",
+      "commands": {
+        "total_input_bytes.value": {
+          "command": "opennop show workers | sed -n '26p' | awk '{print$4}'"
+        },
+        "total_output_bytes.value": {
+          "command": "opennop show workers | sed -n '26p' | awk '{print$6}'"
+        },
+        "comp_bytes.value": {
+          "command": "opennop show workers | sed -n '26p' | awk '{print$8}'"
+        },
+        "dedup_bytes.value": {
+          "command": "opennop show workers | sed -n '26p' | awk '{print$10}'"
+        },
+        "total_packets.value": {
+          "command": "opennop show workers | sed -n '26p' | awk '{print$12}'"
+        },
+        "comp_packets.value": {
+          "command": "opennop show workers | sed -n '26p' | awk '{print$14}'"
+        },
+        "dedup_packets.value": {
+          "command": "opennop show workers | sed -n '26p' | awk '{print$16}'"
+        },
+        "comp&dedup_packets.value": {
+          "command": "opennop show workers | sed -n '26p' | awk '{print$18}'"
+        }
+      }
+    },
+    {
+      "path": "/vmstat",
+      "commands": {
+        "memory.swpd": {
+          "command": "vmstat | sed -n '3p' | awk '{print$3}'"
+        },
+        "memory.buffer": {
+          "command": "vmstat | sed -n '3p' | awk '{print$5}'"
+        },
+        "memory.cache": {
+          "command": "vmstat | sed -n '3p' | awk '{print$6}'"
+        },
+        "cpu.us": {
+          "command": "vmstat | sed -n '3p' | awk '{print$13}'"
+        },
+        "cpu.sy": {
+          "command": "vmstat | sed -n '3p' | awk '{print$14}'"
+        },
+        "cpu.wa": {
+          "command": "vmstat | sed -n '3p' | awk '{print$16}'"
+        }
+      }
+    }
+  ],
+  "timeout":2000,
+  "logfile" : "/var/log/collector.log"
+}
