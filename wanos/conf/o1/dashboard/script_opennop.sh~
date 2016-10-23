@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+
+#echo "ejecutando script_opennop..."
+
+echo 'opennop'
+
+echo 'total_input' 'total_output' 
+        
+for i in {1..100}
+do
+   nAlea=$(($RANDOM%10))
+   nAlea2=$(($RANDOM%10))
+   nAlea3=$(($RANDOM%10))
+   nAlea4=$(($RANDOM%10))
+   echo $nAlea   $nAlea2
+   sleep 1
+done
+
+# ./cambiarFormato.sh
+ 

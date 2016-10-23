@@ -1,0 +1,7 @@
+#!/bin/bash
+
+cd content
+../scripts/gen_content.sh . 10
+../scripts/gen_content.sh . 20
+wget http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip
+unzip silesia.zip -d silesia

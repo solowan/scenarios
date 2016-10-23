@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+
+~~~~~~~~~~~~~~~~~~~
+VNX scenario
+~~~~~~~~~~~~~~~~~~~
+
+Name:       WANOS test scenario
+Version:    01
+Description: Basic scenario for testing WanOS capabilities. 
+
+This file is part of the Virtual Networks over LinuX (VNX) Project distribution. 
+(www: http://www.dit.upm.es/vnx - e-mail: vnx@dit.upm.es) 
+
+Departamento de Ingenieria de Sistemas Telematicos (DIT)
+Universidad Politecnica de Madrid
+SPAIN
+
+-->
+
+<vnx xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="/usr/share/xml/vnx/vnx-2.00.xsd">
+
+  <global>
+    <version>2.0</version>
+    <scenario_name>wanos</scenario_name>
+    <ssh_key>/root/.ssh/id_dsa.pub</ssh_key>
+    <ssh_key>/home/solowan/.ssh/id_dsa.pub</ssh_key>
+    <automac/>
+    <vm_mgmt type="private" network="10.250.0.0" mask="24" offset="200">
+       <host_mapping />
+    </vm_mgmt>
+
+    <vm_defaults>
+	    <console id="0" display="no"/>
+	    <console id="1" display="yes"/>
+    </vm_defaults>
+    <cmd-seq seq='start-all'>emula,start-http,start-ftp,start-mgmt</cmd-seq>
+  </global>
+
+  <net name="LanA"   mode="virtual_bridge" />
+  <net name="LanB"   mode="virtual_bridge" />
+  <net name="Lan0"   mode="virtual_bridge" />
+  <net name="Lan1"   mode="virtual_bridge" />
+  <net name="LanSta" mode="virtual_bridge" />
+  <net name="virbr0" mode="virtual_bridge" managed="no"/>
+
+  <vm name="o1" type="libvirt" subtype="kvm" os="wanos" vcpu="4">
+    <filesystem type="cow">filesystems/rootfs_wanos</filesystem>
+    <mem>1024M</mem>
+    <mng_if>no</mng_if>
+    <console id="0" display="no"/>
+    <console id="1" display="yes"/>
+    <if id="1" net="Lan0">
+      <ipv4>192.168.0.10/24</ipv4>
+    </if>
+    <if id="2" net="LanA">
+    </if>
+    <route type="ipv4" gw="192.168.0.1">default</route>
+  </vm>
+
+  <vm name="o2" type="libvirt" subtype="kvm" os="wanos" vcpu="4">
+    <filesystem type="cow">filesystems/rootfs_wanos</filesystem>
+    <mem>1024M</mem>
+    <mng_if>no</mng_if>
+    <console id="0" display="no"/>
+    <console id="1" display="yes"/>
+    <if id="1" net="Lan1">
+      <ipv4>192.168.1.10/24</ipv4>
+    </if>
+    <if id="2" net="LanB">
+    </if>
+    <route type="ipv4" gw="192.168.1.1">default</route>
+  </vm>
+
+  <vm name="h1" type="lxc" arch="x86_64">
+    <filesystem type="cow">filesystems/rootfs_lxc64_solowan</filesystem>
+    <shareddir root="/var/www/">conf/hx/content/</shareddir>
+    <if id="1" net="LanA">
+      <ipv4>192.168.0.2/24</ipv4>
+    </if>
+    <if id="9" net="virbr0">
+      <ipv4>dhcp</ipv4>
+    </if>
+    <route type="ipv4" gw="192.168.0.1">192.168.1.0/24</route>
+
+    <!-- Copy /etc/hosts file -->
+    <filetree seq="on_boot" root="/tmp/">conf/hosts</filetree>
+
+    <!-- Copy scripts and web content -->
+    <filetree seq="on_boot" root="/root/bin/">conf/hx/scripts/</filetree>
+    <!--filetree seq="copycontent" root="/var/www/">conf/hx/content/20M/</filetree>
+    <filetree seq="copycontent-demo" root="/var/www/">conf/hx/content/10M/</filetree!-->
+    
+    <!-- Add host entries to /etc/host -->
+    <exec seq="on_boot" type="verbatim">
+	cat /tmp/hosts >> /etc/hosts;
+        rm /tmp/hosts;
+	sed -i -e 's#DocumentRoot /var/www/html#DocumentRoot /var/www#' /etc/apache2/sites-enabled/000-default.conf;
+        chmod +x /root/bin/*;
+        rm /root/bin/prueba-larga2.sh;
+    </exec>
+
+    <!-- tcp offloading issue -->
+    <exec seq="on_boot" type="verbatim">
+	ethtool -K eth1 gso off gro off tso off;  
+    </exec>
+
+    <exec seq="iperf_cl_no_opt" type="verbatim" ostype="exec">iperf -c 192.168.1.2 -t 150 -i 1 > /root/iperf_noopt_result.out</exec>
+
+    <exec seq="iperf_cl_opt" type="verbatim" ostype="exec">iperf -c 192.168.1.2 -t 150 -i 1 > /root/iperf_opt_result.out</exec>
+
+    <exec seq="wget_no_opt" type="verbatim" ostype="exec">/root/bin/wget_no_opt.sh</exec>
+   
+    <exec seq="wget_opt" type="verbatim" ostype="exec">/root/bin/wget_opt.sh</exec>
+
+    <exec seq="regimen" type="verbatim" ostype="system">wget 192.168.1.2/index.html</exec>
+
+    <exec seq="start-http" type="verbatim" ostype="system">killall iperf</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">cp /root/bin/ports.conf /etc/apache2/</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">service apache2 restart</exec>
+    <!--exec seq="start-http" type="verbatim" ostype="system">bash /root/bin/gen_content.sh /var/www</exec-->
+    <exec seq="start-http" type="verbatim" ostype="system">chmod +r /var/www/random*</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">chmod +r /var/www/payload.txt</exec>
+
+    <exec seq="start-ftp" type="verbatim" ostype="system">
+        python -m pyftpdlib -d /var/www/ -p 21 -w -r 8000-8999 >> /var/log/ftp.log 2>&amp;1 &amp; 
+        python -m pyftpdlib -d /var/www/ -p 2121 -w -r 9000-9999 >> /var/log/ftp.log 2>&amp;1 &amp; 
+    </exec>
+  </vm>
+
+
+  <vm name="h2" type="lxc" arch="x86_64">
+    <filesystem type="cow">filesystems/rootfs_lxc64_solowan</filesystem>
+    <shareddir root="/var/www/">conf/hx/content/</shareddir>
+    <if id="1" net="LanB">
+      <ipv4>192.168.1.2/24</ipv4>
+      <!--ipv4>192.168.1.3/24</ipv4!-->
+    </if>
+    <if id="9" net="virbr0">
+      <ipv4>dhcp</ipv4>
+    </if>
+    <route type="ipv4" gw="192.168.1.1">192.168.0.0/24</route>
+
+    <!-- Copy /etc/hosts file -->
+    <filetree seq="on_boot" root="/tmp/">conf/hosts</filetree>
+
+    <!-- Copy scripts and web content -->
+    <filetree seq="on_boot" root="/root/bin/">conf/hx/scripts/</filetree>
+    <!--filetree seq="copycontent" root="/var/www/">conf/hx/content/20M/</filetree>
+    <filetree seq="copycontent-demo" root="/var/www/">conf/hx/content/10M/</filetree!-->
+
+    <!-- Add host entries to /etc/host -->
+    <exec seq="on_boot" type="verbatim">
+        cat /tmp/hosts >> /etc/hosts;
+        rm /tmp/hosts;
+        sed -i -e 's#DocumentRoot /var/www/html#DocumentRoot /var/www#' /etc/apache2/sites-enabled/000-default.conf;
+        chmod +x /root/bin/*;
+        mv /root/bin/prueba-larga2.sh /root/bin/prueba-larga.sh;
+    </exec>
+
+    <!-- tcp offloading issue -->
+    <exec seq="on_boot" type="verbatim">
+	ethtool -K eth1 gso off gro off tso off;  
+    </exec>
+
+    <exec seq="iperfs" type="verbatim" ostype="system">killall iperf</exec>
+    <exec seq="iperfs" type="verbatim" ostype="system">service apache2 stop</exec>
+    <exec seq="iperfs" type="verbatim" ostype="exec">iperf -s > /root/iperfresult.out</exec>
+
+    <exec seq="start-http" type="verbatim" ostype="system">killall iperf</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">cp /root/bin/ports.conf /etc/apache2/</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">service apache2 restart</exec>
+    <!--exec seq="start-http" type="verbatim" ostype="system">bash /root/bin/gen_content.sh /var/www</exec-->
+    <exec seq="start-http" type="verbatim" ostype="system">chmod +r /var/www/random*</exec>
+    <exec seq="start-http" type="verbatim" ostype="system">chmod +r /var/www/payload.txt</exec>
+
+    <exec seq="start-ftp" type="verbatim" ostype="system">
+        python -m pyftpdlib -d /var/www/ -p 21 -w -r 8000-8999 >> /var/log/ftp.log 2>&amp;1 &amp; 
+        python -m pyftpdlib -d /var/www/ -p 2121 -w -r 9000-9999 >> /var/log/ftp.log 2>&amp;1 &amp; 
+    </exec>
+
+    <exec seq="regimen" type="verbatim" ostype="system">killall iperf</exec>
+
+    <exec seq="regimen" type="verbatim" ostype="system">service apache2 start</exec>
+ </vm>
+
+
+ <vm name="wanem" type="lxc" arch="x86_64">
+    <filesystem type="cow">filesystems/rootfs_lxc64_solowan</filesystem>
+    <if id="1" net="Lan0">
+      <ipv4>192.168.0.1/24</ipv4>
+    </if>
+    <if id="2" net="Lan1">
+      <ipv4>192.168.1.1/24</ipv4>
+    </if>
+    <if id="9" net="virbr0">
+      <ipv4>dhcp</ipv4>
+    </if>
+    <forwarding type="ip" />
+
+    <!-- Copy /etc/hosts file -->
+    <filetree seq="on_boot" root="/tmp/">conf/hosts</filetree>
+
+    <!-- Copy scripts -->
+    <filetree seq="on_boot" root="/root/bin/">conf/wanem/scripts/</filetree>
+
+    <filetree seq="emula" root="/tmp/">./conf/wanem/</filetree>
+    <filetree seq="remula" root="/tmp/wanem.conf">./conf/wanem/wanem.conf.reconf</filetree>
+    
+    <!-- Add host entries to /etc/host -->
+    <exec seq="on_boot" type="verbatim">
+        cat /tmp/hosts >> /etc/hosts;
+        rm /tmp/hosts;
+    </exec>
+
+    <exec seq="emula,remula" type="verbatim" ostype="system">/tmp/configure.sh</exec>
+    <!--exec seq="remula" type="verbatim" ostype="system">/tmp/configure.sh</exec-->
+
+    <!-- Add munin-node configuration -->
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+	unlink /etc/munin/plugins/apache_accesses;
+        unlink /etc/munin/plugins/apache_processes;
+	unlink /etc/munin/plugins/apache_volume;
+	unlink /etc/munin/plugins/users;
+	unlink /etc/munin/plugins/swap;
+        chown munin:munin -R /var/lib/munin/;
+        chown munin:munin -R /var/log/munin/;
+        chown munin:munin -R /var/run/munin/;
+    </exec>
+    <exec seq="start-mgmt" type="verbatim" ostype="system">
+	sed -i 's/allow ^127\\.0\\.0\\.1\$/allow ^192\\.168\\.100\\.10\$/' /etc/munin/munin-node.conf;
+	service munin-node restart
+    </exec>
+ 
+  </vm>
+
+  <host>
+    <hostif net="Lan0">
+       <ipv4>192.168.0.11/24</ipv4>
+    </hostif>
+    <hostif net="Lan1">
+       <ipv4>192.168.1.11/24</ipv4>
+    </hostif>
+    <exec seq="start-mgmt-chrome" type="verbatim">
+       ( chromium-browser --user-data-dir=/tmp/ http://192.168.0.10 &amp; );
+       ( chromium-browser --user-data-dir=/tmp/ http://192.168.1.10 &amp; );
+    </exec>
+    <exec seq="start-mgmt-firefox" type="verbatim">
+       ( firefox http://192.168.0.10 http://192.168.1.10 &amp; );
+    </exec>
+
+  </host>
+
+</vnx>

@@ -1,0 +1,84 @@
+#!/bin/bash
+
+#
+# Name: create-rootfs-wanos
+#
+# Description: creates a wanos VNX root filesystem starting from wanos zip files 
+#              (e.g.: wanos-2.0.5-ova.zip) downloaded from http://wanos.co
+#
+# This file is part of VNX package.
+#
+# Authors: David Fernández (david@dit.upm.es)
+# Copyright (C) 2015 DIT-UPM
+#           Departamento de Ingenieria de Sistemas Telematicos
+#           Universidad Politecnica de Madrid
+#           SPAIN
+#           
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+#
+# An online copy of the licence can be found at http://www.gnu.org/copyleft/gpl.html
+#
+
+WANOS_OVA_NAME='wanos*-ova.zip'
+WANOS_OVAS=$(ls -r $WANOS_OVA_NAME 2> /dev/null)
+WANOS_SYMLINK='rootfs_wanos'
+CDIR=$( pwd )
+
+if [ -z "$WANOS_OVAS" ]; then
+    echo "--"
+	echo "ERROR: wanos-ova zip file not found. Download it from 'http://wanos.co'"	
+	echo "       before executing this script."	
+    echo "--"
+    exit 1
+fi
+
+#echo $WANOS_OVAS
+AUX=( $WANOS_OVAS )  # Convert WANOS_OVAS to an array
+WANOS_OVA=${AUX[0]}  # Select the first one
+NUMOVAS=${#AUX[@]}   # Save array size
+
+if [ $NUMOVAS -gt 1 ]; then
+    echo "--"
+	echo "WARNING: more than one wanos-ova zip file found. Selecting $WANOS_OVA"
+    echo "--"
+fi
+
+echo "-- "
+echo "-- create-rootfs-wanos: creates a wanos VNX root filesystem starting from wanos zip file"
+echo "-- "
+echo "-- Uncompressing zip file $WANOS_OVA..."
+WANOS_OVA_ABS="${CDIR}/${WANOS_OVA}"
+TMP=$( mktemp -d )
+cd $TMP
+unzip $WANOS_OVA_ABS
+OVA=$( ls *.ova )
+echo "-- Uncompresing ova file $OVA..."
+tar xfv $OVA
+VMDK=$( ls *.vmdk )
+VMDK_NAME="${VMDK%.*}"
+echo "-- Converting $VMDK image to qcow2 format"
+qemu-img convert -p -f vmdk -O qcow2 ${VMDK} ${VMDK_NAME}.qcow2
+mv ${VMDK_NAME}.qcow2 $CDIR
+
+# Create symbolic link
+echo "-- Creating $WANOS_SYMLINK link..."
+cd $CDIR
+rm -f $WANOS_SYMLINK 
+ln -s ${VMDK_NAME}.qcow2 $WANOS_SYMLINK
+
+#read -p "Press any key to continue..."
+rm -rf $TMP
+echo "-- ...done"
+
