@@ -1,0 +1,12 @@
+random1-20M.out
+random2-20M.out
+random3-20M.out
+random4-20M.out
+random5-20M.out
+random6-20M.out
+random7-20M.out
+random8-20M.out
+random9-20M.out
+random10-20M.out
+redundant1-20M.txt
+redundant2-20M.txt

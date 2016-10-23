@@ -1,0 +1,3 @@
+#!/bin/bash
+
+while true; do ./gst o1 c "Total input" "Total output" | tr -d '\n'; sleep 2; done | dialog --trim --progressbox 'Optimizer 1' 6 70

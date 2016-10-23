@@ -1,0 +1,15 @@
+#!/bin/bash
+
+BASEDIR=`dirname "$0"`
+BASEDIR=`(cd "$BASEDIR"; pwd)`
+cd "$BASEDIR"
+
+mkdir ../content
+cd ../content
+echo "*" > .gitignore
+../scripts/gen_content.sh . 10
+../scripts/gen_content.sh . 20
+wget -N http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip
+unzip -o silesia.zip -d silesia
+rm -f silesia.all
+cat silesia/* > silesia.all

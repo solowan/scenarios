@@ -1,0 +1,41 @@
+{
+  "port": 4000,
+  "serverConnections" :[
+    {
+      "path": "/in",
+      "commands": {
+        "total_input_bytes.value": {
+          "command": "opennop show stats in_dedup | grep -v '-' | sed -n '2p' | tr -s ' ' | cut -d' ' -f2"
+        },
+        "total_output_bytes.value": {
+          "command": "opennop show stats in_dedup | grep -v '-' | sed -n '3p' | tr -s ' ' | cut -d' ' -f2"
+        },
+        "ipt_total_input_bytes.value": {
+          "command": "iptables -t mangle -nvx -L PREROUTING | tr -s ' ' | grep '192.168.1.2 192.168.0.2 tcp dpt:80' | awk '{print$2}'"
+        },
+        "ipt_total_output_bytes.value": {
+          "command": "iptables -t mangle -nvx -L POSTROUTING | tr -s ' ' | grep '192.168.1.2 192.168.0.2 tcp dpt:80' | awk '{print$2}'"
+        }
+      }
+    },
+    {
+      "path": "/out",
+      "commands": {
+        "total_input_bytes.value": {
+          "command": "opennop show stats out_dedup | grep -v '-' | sed -n '2p'| tr -s ' ' | cut -d' ' -f2"
+        },
+        "total_output_bytes.value": {
+          "command": "opennop show stats out_dedup | grep -v '-' | sed -n '3p'| tr -s ' ' | cut -d' ' -f2"
+        },
+        "ipt_total_input_bytes.value": {
+          "command": "iptables -t mangle -nvx -L PREROUTING | tr -s ' ' | grep '192.168.0.2 192.168.1.2 tcp spt:80' | awk '{print$2}'"
+        },
+        "ipt_total_output_bytes.value": {
+          "command": "iptables -t mangle -nvx -L POSTROUTING | tr -s ' ' | grep '192.168.0.2 192.168.1.2 tcp spt:80' | awk '{print$2}'"
+        }
+      }
+    }
+  ],
+  "timeout":2000,
+  "logfile" : "/var/log/collector.log"
+}

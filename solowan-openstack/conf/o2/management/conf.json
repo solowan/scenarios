@@ -1,0 +1,5 @@
+{
+  "port": 4001,
+  "logfile" : "/tmp/management.log",
+  "web_path" : "/"
+}

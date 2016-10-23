@@ -1,0 +1,11 @@
+#!/bin/bash
+
+OPTIMIZER=$1
+COMPDECOMP=$2
+FIELD1=$3
+FIELD2=$4
+FIELD3=$5
+FIELD4=$6
+
+expect -c "spawn telnet $OPTIMIZER 666; sleep 1; send \"gst${COMPDECOMP}\\n\"; expect \"Current debug\"" \
+	   | grep -e "$FIELD1" -e "$FIELD2" -e "$FIELD3" -e "$FIELD4"
